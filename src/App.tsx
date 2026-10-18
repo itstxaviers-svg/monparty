@@ -1,18 +1,47 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Expand, RotateCcw, Settings, Volume2, VolumeX, X } from 'lucide-react'
-import { actors, correctAudio, originalFoods, originalImages, sceneNames, wrongAudio } from './data/originalGame'
+import { actorById, actors, cafeScenes, correctAudio, invitationAudio, invitationImages, meetLayout, originalFoods, originalImages, sceneNames, wrongAudio } from './data/originalGame'
 import { assetUrl } from './data/gameData'
 import { useAudioManager } from './hooks/useAudioManager'
 import { useGameSave } from './hooks/useGameSave'
 import type { MonsterId } from './types'
 
 const shuffle = <T,>(items: readonly T[]): T[] => [...items].sort(() => Math.random() - 0.5)
+const preloadedAudioSources = [
+  ...actors.map((actor) => actor.voice),
+  ...Object.values(invitationAudio).flatMap((audio) => Object.values(audio)),
+  correctAudio,
+  wrongAudio,
+]
+const invitationMonsterOrder: MonsterId[] = ['troll', 'skeleton', 'witch', 'vampire', 'ghost', 'raven']
+
+interface InvitationRound {
+  key: string
+  monsterId: MonsterId
+  image: string
+  audio: string
+}
+
+function createInvitationRounds(): InvitationRound[] {
+  const firstCycle = shuffle(actors)
+  const secondCycle = shuffle(actors)
+  if (secondCycle[0].id === firstCycle[firstCycle.length - 1].id) {
+    const nextActor = secondCycle[1]
+    secondCycle[1] = secondCycle[0]
+    secondCycle[0] = nextActor
+  }
+  return [...firstCycle, ...secondCycle.slice(0, 5)].map((actor, index) => {
+    const audio = invitationAudio[actor.id].welcome
+    return { key: `${index}-${actor.id}`, monsterId: actor.id, image: invitationImages.cards[actor.id], audio }
+  })
+}
 
 function App() {
   const { state, go, patch, reset } = useGameSave()
-  const audio = useAudioManager(state.soundOn)
+  const audio = useAudioManager(state.soundOn, preloadedAudioSources)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const scene = Math.min(state.scene, sceneNames.length - 1)
+  const usesOriginalFrame = scene <= 42
   const next = () => go(Math.min(scene + 1, sceneNames.length - 1))
 
   const toggleFullscreen = () => {
@@ -21,33 +50,60 @@ function App() {
   }
 
   return (
-    <main className="game-shell">
+    <main className={`game-shell ${usesOriginalFrame ? 'game-shell--source' : ''}`}>
+      <nav className="project-slide-menu" aria-label="Choose a slide">
+        <div className="project-slide-menu__panel">
+          <span>SLIDES</span>
+          <div className="project-slide-menu__grid">
+            {sceneNames.map((name, index) => <button
+              key={`${index}-${name}`}
+              type="button"
+              aria-label={`Slide ${index + 1}: ${name}`}
+              aria-current={scene === index ? 'page' : undefined}
+              title={name}
+              onClick={() => go(index)}
+            >{index + 1}</button>)}
+          </div>
+        </div>
+      </nav>
       <section className="game-stage" data-scene={scene}>
-        {scene > 0 && scene < sceneNames.length - 1 && (
+        {!usesOriginalFrame && scene < sceneNames.length - 1 && (
           <div className="scene-marker" aria-label={`Scene ${scene + 1} of ${sceneNames.length}`}>
             <span>{String(scene + 1).padStart(2, '0')}</span><i /><small>{sceneNames[scene]}</small>
           </div>
         )}
-        <button className="settings-trigger" aria-label="Settings" onClick={() => setSettingsOpen(true)}><Settings /></button>
+        {!usesOriginalFrame && <button className="settings-trigger" aria-label="Settings" onClick={() => setSettingsOpen(true)}><Settings /></button>}
 
         {scene === 0 && <CoverScene onNext={next} />}
         {scene === 1 && <HouseScene onNext={next} />}
-        {scene === 2 && <MeetScene play={audio.play} onNext={next} />}
-        {scene === 3 && <VideoScene source={assetUrl('assets/video/monster-party.mp4')} title="Welcome to the Monster House" onNext={next} />}
-        {scene === 4 && <VoiceDeck play={audio.play} onDone={next} />}
-        {scene === 5 && <VideoScene source={assetUrl('assets/video/skeleton.mp4')} title="A message from the monsters" onNext={next} />}
-        {scene === 6 && <FeelingsChallenge play={audio.play} onDone={next} />}
-        {scene === 7 && <VideoScene source={assetUrl('assets/video/vampire.mp4')} title="How are the monsters?" onNext={next} />}
-        {scene === 8 && <TimedChallenge seconds={60} source={assetUrl('assets/video/vampire-clue.mp4')} onNext={next} />}
-        {scene === 9 && <FoodVocabulary play={audio.play} onDone={next} />}
-        {scene === 10 && <FoodMemory play={audio.play} onDone={next} />}
-        {scene === 11 && <TimedChallenge seconds={7} source={assetUrl('assets/video/witch.mp4')} onNext={next} />}
-        {scene === 12 && <InvitationJourney play={audio.play} onDone={next} />}
-        {scene === 13 && <RaceIntro onNext={next} />}
-        {scene === 14 && <MonsterRace play={audio.play} onDone={next} />}
-        {scene === 15 && <VideoScene source={assetUrl('assets/video/raven.mp4')} title="The race is over!" onNext={next} />}
-        {scene === 16 && <VideoScene source={assetUrl('assets/video/monster-party.mp4')} title="The party is ready" onNext={next} />}
-        {scene === 17 && <PartyScene onReplay={reset} />}
+        {scene === 2 && <MeetScene play={audio.play} onNext={() => go(3)} />}
+        {scene === 3 && <SourceVideoScene source={assetUrl('assets/video/slide-05.mp4')} onNext={() => go(4)} />}
+        {scene >= 4 && scene <= 17 && <InvitationGame scene={scene} play={audio.play} go={go} />}
+        {scene === 18 && <SourceVideoScene source={assetUrl('assets/video/slide-19-witch.mp4')} onNext={() => go(19)} layout="transition" />}
+        {scene === 19 && <FeelingsChallenge play={audio.play} onDone={() => go(20)} />}
+        {scene === 20 && <SourceVideoScene source={assetUrl('assets/video/slide-21-skeleton.mp4')} onNext={() => go(21)} layout="transition" />}
+        {scene === 21 && <AutoAdvanceVideoScene source={assetUrl('assets/video/slide-22-cafe.mp4')} onDone={() => go(22)} />}
+        {scene === 22 && <FoodVocabulary play={audio.play} onDone={() => go(23)} />}
+        {scene === 23 && <FoodMemory play={audio.play} onDone={() => go(24)} />}
+        {scene === 24 && <AutoAdvanceVideoScene source={assetUrl('assets/video/cafe/slide-25.mp4')} onDone={() => go(25)} delayMs={7_000} variant="opening" />}
+        {scene === 25 && <SourceVideoScene source={assetUrl('assets/video/cafe/slide-26-witch.mp4')} onNext={() => go(26)} layout="transition" />}
+        {scene === 26 && <CafeOrderGame key={scene} monsterId="witch" play={audio.play} onDone={() => go(27)} />}
+        {scene === 27 && <SourceVideoScene source={assetUrl('assets/video/cafe/slide-28-ghost.mp4')} onNext={() => go(28)} layout="transition" />}
+        {scene === 28 && <CafeOrderGame key={scene} monsterId="ghost" play={audio.play} onDone={() => go(29)} />}
+        {scene === 29 && <SourceVideoScene source={assetUrl('assets/video/cafe/slide-30-raven.mp4')} onNext={() => go(30)} layout="transition" />}
+        {scene === 30 && <CafeOrderGame key={scene} monsterId="raven" play={audio.play} onDone={() => go(31)} />}
+        {scene === 31 && <SourceVideoScene source={assetUrl('assets/video/cafe/slide-32-vampire.mp4')} onNext={() => go(32)} layout="transition" />}
+        {scene === 32 && <CafeOrderGame key={scene} monsterId="vampire" play={audio.play} onDone={() => go(33)} />}
+        {scene === 33 && <SourceVideoScene source={assetUrl('assets/video/cafe/slide-34-troll.mp4')} onNext={() => go(34)} layout="transition" />}
+        {scene === 34 && <CafeOrderGame key={scene} monsterId="troll" play={audio.play} onDone={() => go(35)} />}
+        {scene === 35 && <SourceVideoScene source={assetUrl('assets/video/cafe/slide-36-skeleton.mp4')} onNext={() => go(36)} layout="transition" />}
+        {scene === 36 && <CafeOrderGame key={scene} monsterId="skeleton" play={audio.play} onDone={() => go(37)} />}
+        {scene === 37 && <AutoAdvanceVideoScene source={assetUrl('assets/video/cafe/slide-38-full.mp4')} onDone={() => go(38)} delayMs={60_000} variant="closing" />}
+        {scene === 38 && <FoodWordSwitcher play={audio.play} onNext={() => go(39)} />}
+        {scene === 39 && <DobbleGame play={audio.play} onNext={() => go(40)} />}
+        {scene === 40 && <SourceVideoScene source={assetUrl('assets/video/slide-41-troll.mp4')} onNext={() => go(41)} layout="transition" />}
+        {scene === 41 && <SourceVideoScene source={assetUrl('assets/video/slide-42-song.mp4')} onNext={() => go(42)} layout="song" autoPlay />}
+        {scene === 42 && <FinalScene />}
 
         {settingsOpen && (
           <SettingsPanel
@@ -67,27 +123,43 @@ function NextButton({ onClick, children = 'NEXT', disabled = false }: { onClick:
   return <button className="next-plaque" aria-label={typeof children === 'string' ? children : undefined} onClick={onClick} disabled={disabled}><span>{children}</span><b>›</b></button>
 }
 
+function SourceNextButton({ onClick, position }: { onClick: () => void; position: 'center' | 'right' }) {
+  return <button className={`source-next source-next--${position}`} aria-label="NEXT" onClick={onClick}>
+    <img src={originalImages.nextFrame} alt="" /><span>NEXT</span>
+  </button>
+}
+
 function CoverScene({ onNext }: { onNext: () => void }) {
-  return <div className="scene art-scene" style={{ '--scene-art': `url("${originalImages.title}")` } as React.CSSProperties}>
-    <div className="paper-grain" /><NextButton onClick={onNext}>START</NextButton>
+  return <div className="scene art-scene source-scene" style={{ '--scene-art': `url("${originalImages.title}")` } as React.CSSProperties}>
+    <SourceNextButton onClick={onNext} position="center" />
   </div>
 }
 
 function HouseScene({ onNext }: { onNext: () => void }) {
-  return <div className="scene art-scene" style={{ '--scene-art': `url("${originalImages.house}")` } as React.CSSProperties}>
-    <div className="mist mist-one" /><div className="mist mist-two" /><NextButton onClick={onNext} />
+  return <div className="scene art-scene source-scene" style={{ '--scene-art': `url("${originalImages.house}")` } as React.CSSProperties}>
+    <SourceNextButton onClick={onNext} position="right" />
   </div>
 }
 
 function MeetScene({ play, onNext }: { play: (source: string) => void; onNext: () => void }) {
-  return <div className="scene art-scene meet-scene" style={{ '--scene-art': `url("${originalImages.house}")` } as React.CSSProperties}>
-    <div className="meet-title"><span>MEET THE</span><strong>MONSTERS</strong><small>Tap a monster to hear its voice</small></div>
-    <div className="monster-cast">
-      {actors.map((actor) => <button className={`cast-member cast-${actor.id}`} key={actor.id} onClick={() => play(actor.voice)} aria-label={`Listen to ${actor.name}`}>
-        <img src={actor.character} alt={actor.name} /><span>{actor.name}</span>
-      </button>)}
-    </div>
-    <NextButton onClick={onNext} />
+  return <div className="scene art-scene source-scene" style={{ '--scene-art': `url("${originalImages.house}")` } as React.CSSProperties}>
+    {meetLayout.map((layout) => {
+      const actor = actorById[layout.id]
+      return <button
+        className="source-character"
+        key={actor.id}
+        aria-label={`Listen to ${actor.name}`}
+        onClick={() => play(actor.voice)}
+        style={{
+          left: `${layout.left / 10.24}%`, top: `${layout.top / 7.68}%`,
+          width: `${layout.width / 10.24}%`, height: `${layout.height / 7.68}%`,
+          zIndex: layout.z,
+          '--image-left': `${layout.imageLeft}%`, '--image-top': `${layout.imageTop}%`,
+          '--image-width': `${layout.imageWidth}%`, '--image-height': `${layout.imageHeight}%`,
+        } as React.CSSProperties}
+      ><video src={actor.animation} aria-label={actor.name} autoPlay loop muted playsInline preload="auto" /></button>
+    })}
+    <SourceNextButton onClick={onNext} position="right" />
   </div>
 }
 
@@ -95,6 +167,100 @@ function VideoScene({ source, title, onNext }: { source: string; title: string; 
   return <div className="scene video-scene">
     <div className="video-frame"><p>{title}</p><video src={source} controls playsInline preload="metadata" /></div>
     <NextButton onClick={onNext} />
+  </div>
+}
+
+function SourceVideoScene({ source, onNext, layout = 'full', autoPlay = false }: { source: string; onNext: () => void; layout?: 'full' | 'transition' | 'song'; autoPlay?: boolean }) {
+  return <div className={`scene source-video-scene source-video-scene--${layout}`}>
+    <video src={source} controls autoPlay={autoPlay} playsInline preload="metadata" />
+    <SourceNextButton onClick={onNext} position="right" />
+  </div>
+}
+
+function AutoAdvanceVideoScene({ source, onDone, delayMs = 60_000, variant = 'default' }: { source: string; onDone: () => void; delayMs?: number; variant?: 'default' | 'opening' | 'closing' }) {
+  useEffect(() => {
+    const timer = window.setTimeout(onDone, delayMs)
+    return () => window.clearTimeout(timer)
+  }, [delayMs, onDone])
+
+  return <div className={`scene source-video-scene source-video-scene--transition source-video-scene--autoplay source-video-scene--autoplay-${variant}`}>
+    <video src={source} controls autoPlay playsInline preload="auto" />
+  </div>
+}
+
+function InvitationGame({ scene, play, go }: { scene: number; play: (source: string) => void; go: (scene: number) => void }) {
+  const [rounds, setRounds] = useState<InvitationRound[]>(createInvitationRounds)
+  const [heard, setHeard] = useState(false)
+  const [wrong, setWrong] = useState<MonsterId | null>(null)
+  const [correct, setCorrect] = useState<MonsterId | null>(null)
+
+  useEffect(() => {
+    setHeard(false)
+    setWrong(null)
+    setCorrect(null)
+  }, [scene])
+
+  if (scene === 4) {
+    return <div className="scene invitation-mailbox-scene" style={{ '--scene-art': `url("${invitationImages.mailbox}")` } as React.CSSProperties}>
+      <button className="mailbox-hotspot" aria-label="Open the mailbox" onClick={() => go(5)} />
+    </div>
+  }
+
+  if (scene === 5) {
+    return <div className="scene invitation-letter-scene" style={{ '--scene-art': `url("${invitationImages.mailboxDim}")` } as React.CSSProperties}>
+      <button className="flying-letter" aria-label="Open the invitation" onClick={() => go(6)}>
+        <img src={invitationImages.envelope} alt="Invitation envelope" />
+      </button>
+    </div>
+  }
+
+  if (scene === 17) {
+    const restart = () => {
+      setRounds(createInvitationRounds())
+      go(4)
+    }
+    return <div className="scene invitation-game-over" style={{ '--scene-art': `url("${invitationImages.gameOver}")` } as React.CSSProperties}>
+      <button className="game-over-hotspot game-over-hotspot--again" aria-label="Start again" onClick={restart} />
+      <button className="game-over-hotspot game-over-hotspot--continue" aria-label="Continue" onClick={() => go(18)} />
+    </div>
+  }
+
+  const roundIndex = scene - 6
+  const current = rounds[roundIndex]
+  const listen = () => {
+    play(current.audio)
+    setHeard(true)
+  }
+  const choose = (id: MonsterId) => {
+    if (!heard || correct) return
+    if (id !== current.monsterId) {
+      setWrong(id)
+      play(invitationAudio[current.monsterId].wrong)
+      window.setTimeout(() => setWrong(null), 500)
+      return
+    }
+    setCorrect(id)
+    play(invitationAudio[current.monsterId].correct)
+    window.setTimeout(() => go(scene + 1), 650)
+  }
+
+  return <div className="scene invitation-round-scene" style={{ '--scene-art': `url("${invitationImages.mailboxDim}")` } as React.CSSProperties}>
+    <button className={`invitation-card ${heard ? 'is-heard' : ''}`} aria-label="Listen to the invitation" onClick={listen}>
+      <img src={current.image} alt="Monster party invitation" />
+    </button>
+    <div className={`invitation-monsters ${heard ? 'is-ready' : ''}`}>
+      {invitationMonsterOrder.map((id) => {
+        const actor = actorById[id]
+        return <button
+          key={actor.id}
+          data-monster={actor.id}
+          className={`${wrong === actor.id ? 'is-wrong' : ''} ${correct === actor.id ? 'is-correct' : ''}`}
+          aria-label={actor.name}
+          disabled={!heard || Boolean(correct)}
+          onClick={() => choose(actor.id)}
+        ><img src={actor.portrait} alt={actor.name} /></button>
+      })}
+    </div>
   </div>
 }
 
@@ -121,18 +287,35 @@ function VoiceDeck({ play, onDone }: { play: (source: string) => void; onDone: (
   </div>
 }
 
+const feelingsLayout = [
+  { id: 'witch', left: 156.9245, top: 461.0452, width: 272.0781, height: 289.0784, imageLeft: -25.3635, imageTop: 0, imageWidth: 159.5024, imageHeight: 100, z: 4 },
+  { id: 'skeleton', left: 598.4136, top: 494.4937, width: 200.7593, height: 250.1868, imageLeft: -45.8487, imageTop: 0, imageWidth: 187.0828, imageHeight: 100, z: 5 },
+  { id: 'vampire', left: 406.2345, top: 302.0019, width: 211.531, height: 283.2093, imageLeft: -58.9984, imageTop: 0, imageWidth: 200.9919, imageHeight: 100, z: 6 },
+  { id: 'troll', left: 69.8528, top: 179.2259, width: 239.1302, height: 245.5519, imageLeft: -20.875, imageTop: 0, imageWidth: 153.861, imageHeight: 100, z: 7 },
+  { id: 'ghost', left: 711.0102, top: 199.946, width: 223.055, height: 261.0992, imageLeft: -52.3669, imageTop: 0, imageWidth: 185.6948, imageHeight: 105.8734, z: 8 },
+  { id: 'raven', left: 350.4337, top: 14.9512, width: 302.4309, height: 287.0507, imageLeft: -27.3864, imageTop: 0, imageWidth: 142.3717, imageHeight: 100, z: 9 },
+] as const
+
 function FeelingsChallenge({ play, onDone }: { play: (source: string) => void; onDone: () => void }) {
-  const prompts = useMemo(() => shuffle(actors), [])
-  const [round, setRound] = useState(0)
-  const [wrong, setWrong] = useState<MonsterId | null>(null)
-  const target = prompts[round]
-  const choose = (id: MonsterId) => {
-    if (id !== target.id) { setWrong(id); play(wrongAudio); window.setTimeout(() => setWrong(null), 450); return }
-    play(correctAudio); window.setTimeout(() => round === prompts.length - 1 ? onDone() : setRound((value) => value + 1), 500)
-  }
-  return <div className="scene art-scene feelings-scene" style={{ '--scene-art': `url("${originalImages.feelings}")` } as React.CSSProperties}>
-    <div className="task-board"><small>{round + 1} / 6</small><h2>HOW ARE YOU?</h2><button className="listen-button" data-target={target.id} onClick={() => play(target.feelingAudio)}><Volume2 /> LISTEN</button><p>Listen and tap the right monster.</p></div>
-    <div className="feeling-cast">{actors.map((actor) => <button className={wrong === actor.id ? 'is-wrong' : ''} key={actor.id} onClick={() => choose(actor.id)}><img src={actor.character} alt={actor.name} /><span>{actor.feeling}</span></button>)}</div>
+  return <div className="scene art-scene source-feelings-scene" style={{ '--scene-art': `url("${originalImages.feelings}")` } as React.CSSProperties}>
+    <button className="feelings-advance-area" aria-label="Continue" onClick={onDone} />
+    {feelingsLayout.map((layout) => {
+      const actor = actorById[layout.id]
+      return <button
+        className="feelings-actor"
+        key={actor.id}
+        aria-label={`${actor.name}: ${actor.feeling}`}
+        onClick={() => play(actor.feelingAudio)}
+        style={{
+          left: `${layout.left / 10.24}%`, top: `${layout.top / 7.68}%`,
+          width: `${layout.width / 10.24}%`, height: `${layout.height / 7.68}%`,
+          zIndex: layout.z,
+          '--image-left': `${layout.imageLeft}%`, '--image-top': `${layout.imageTop}%`,
+          '--image-width': `${layout.imageWidth}%`, '--image-height': `${layout.imageHeight}%`,
+        } as React.CSSProperties}
+      ><video src={actor.animation} poster={actor.character} autoPlay loop muted playsInline preload="auto" /></button>
+    })}
+    <SourceNextButton onClick={onDone} position="right" />
   </div>
 }
 
@@ -151,13 +334,228 @@ function TimedChallenge({ seconds, source, onNext }: { seconds: number; source: 
   </div>
 }
 
+const foodLayout = [
+  { id: 'toast', left: 169.095, top: 44.3128, width: 136.8769, height: 148.6925 },
+  { id: 'juice', left: 47.5251, top: 244.5307, width: 136.8769, height: 186.2344 },
+  { id: 'melon', left: 806.5249, top: 214.4972, width: 154.0389, height: 148.6925 },
+  { id: 'roll', left: 664.2849, top: 34.6592, width: 164.7651, height: 148.6925 },
+  { id: 'bacon', left: 145.1341, top: 484.7989, width: 205.5249, height: 148.6925 },
+  { id: 'peach', left: 705.0447, top: 457.9832, width: 136.8769, height: 148.6925 },
+] as const
+
 function FoodVocabulary({ play, onDone }: { play: (source: string) => void; onDone: () => void }) {
-  const [heard, setHeard] = useState<string[]>([])
-  const listen = (id: string, source: string) => { play(source); setHeard((values) => values.includes(id) ? values : [...values, id]) }
-  return <div className="scene art-scene food-scene" style={{ '--scene-art': `url("${originalImages.foodIntro}")` } as React.CSSProperties}>
-    <div className="food-title"><small>THE WITCH'S KITCHEN</small><h2>WHAT'S FOR DINNER?</h2><p>Tap every picture and repeat the word.</p></div>
-    <div className="food-shelf">{originalFoods.map((food) => <button className={heard.includes(food.id) ? 'is-heard' : ''} key={food.id} onClick={() => listen(food.id, food.audio)}><img src={food.image} alt={food.label} /><span>{food.label}</span><Volume2 /></button>)}</div>
-    <NextButton onClick={onDone} disabled={heard.length < originalFoods.length}>{heard.length === originalFoods.length ? 'NEXT' : `${heard.length}/6`}</NextButton>
+  return <div className="scene art-scene source-food-scene" style={{ '--scene-art': `url("${originalImages.foodIntro}")` } as React.CSSProperties}>
+    {foodLayout.map((layout) => {
+      const food = originalFoods.find((item) => item.id === layout.id)!
+      return <button
+        className="source-food"
+        key={food.id}
+        aria-label={food.label}
+        onClick={() => play(food.audio)}
+        style={{ left: `${layout.left / 10.24}%`, top: `${layout.top / 7.68}%`, width: `${layout.width / 10.24}%`, height: `${layout.height / 7.68}%` }}
+      ><img src={food.image} alt={food.label} /></button>
+    })}
+    <SourceNextButton onClick={onDone} position="right" />
+  </div>
+}
+
+type FoodId = (typeof originalFoods)[number]['id']
+
+const foodOwner: Record<FoodId, MonsterId> = {
+  toast: 'ghost',
+  juice: 'vampire',
+  melon: 'skeleton',
+  roll: 'troll',
+  bacon: 'raven',
+  peach: 'witch',
+}
+
+function CafeOrderGame({ monsterId, play, onDone }: { monsterId: MonsterId; play: (source: string) => void; onDone: () => void }) {
+  const scene = cafeScenes[monsterId]
+  const [wrong, setWrong] = useState<FoodId | null>(null)
+  const [correct, setCorrect] = useState(false)
+
+  const choose = (foodId: FoodId) => {
+    if (correct) return
+    if (foodId !== scene.correctFood) {
+      setWrong(foodId)
+      play(invitationAudio[foodOwner[foodId]].wrong)
+      window.setTimeout(() => setWrong(null), 520)
+      return
+    }
+    setCorrect(true)
+    play(invitationAudio[monsterId].correct)
+  }
+
+  return <div className="scene art-scene source-food-scene cafe-order-scene" style={{ '--scene-art': `url("${scene.background}")` } as React.CSSProperties}>
+    {foodLayout.map((layout) => {
+      const food = originalFoods.find((item) => item.id === layout.id)!
+      return <button
+        className={`source-food cafe-food-choice ${wrong === food.id ? 'is-feedback-wrong' : ''} ${correct && food.id === scene.correctFood ? 'is-feedback-correct' : ''}`}
+        key={food.id}
+        aria-label={food.label}
+        disabled={correct}
+        onClick={() => choose(food.id)}
+        style={{ left: `${layout.left / 10.24}%`, top: `${layout.top / 7.68}%`, width: `${layout.width / 10.24}%`, height: `${layout.height / 7.68}%` }}
+      ><img src={food.image} alt={food.label} /></button>
+    })}
+    {correct && <video className="cafe-reaction" src={scene.reaction} autoPlay loop muted playsInline preload="auto" />}
+    <SourceNextButton onClick={onDone} position="right" />
+  </div>
+}
+
+function FoodWordSwitcher({ play, onNext }: { play: (source: string) => void; onNext: () => void }) {
+  const [wordId, setWordId] = useState<FoodId | null>(null)
+  const [spinning, setSpinning] = useState(false)
+  const [switchOn, setSwitchOn] = useState(false)
+  const selectedFood = originalFoods.find((food) => food.id === wordId)
+
+  const chooseWord = () => {
+    if (spinning) return
+    const choices = originalFoods.filter((food) => food.id !== wordId)
+    const nextFood = choices[Math.floor(Math.random() * choices.length)]
+    setSpinning(true)
+    setSwitchOn((value) => !value)
+    window.setTimeout(() => {
+      setWordId(nextFood.id)
+      setSpinning(false)
+      play(nextFood.audio)
+    }, 320)
+  }
+
+  return <div className="scene art-scene food-word-switcher" style={{ '--scene-art': `url("${originalImages.raceWordBackground}")` } as React.CSSProperties}>
+    <header className="food-word-heading"><h1>RACE</h1><p>PRESS THE SWITCH AND LISTEN</p></header>
+    <div className={`food-word-display ${selectedFood ? 'has-word' : ''} ${spinning ? 'is-spinning' : ''}`}>
+      <img src={originalImages.raceWordFrame} alt="" />
+      <span aria-live="polite">{spinning ? '…' : selectedFood?.label ?? '?'}</span>
+    </div>
+    <button className={`food-word-toggle ${switchOn ? 'is-on' : ''}`} aria-label="Choose a food word" onClick={chooseWord} disabled={spinning}>
+      <span className="food-word-toggle__track"><i /></span>
+      <b>NEW WORD</b>
+    </button>
+    <SourceNextButton onClick={onNext} position="right" />
+  </div>
+}
+
+type DobbleSymbol = { id: string; label: string; image: string }
+type DobbleRound = { shared: DobbleSymbol; left: DobbleSymbol[]; right: DobbleSymbol[]; rotations: Record<string, number> }
+
+const dobbleSymbols: DobbleSymbol[] = [
+  ...actors.map((actor) => ({ id: actor.id, label: actor.name, image: actor.portrait })),
+  ...originalFoods.map((food) => ({ id: food.id, label: food.label, image: food.image })),
+]
+
+function createDobbleRounds(): DobbleRound[] {
+  return shuffle(dobbleSymbols).slice(0, 5).map((shared, roundIndex) => {
+    const available = shuffle(dobbleSymbols.filter((symbol) => symbol.id !== shared.id))
+    const left = shuffle([shared, ...available.slice(0, 4)])
+    const right = shuffle([shared, ...available.slice(4, 8)])
+    const rotations = Object.fromEntries([...left, ...right].map((symbol, index) => [
+      `${index < 5 ? 'left' : 'right'}-${symbol.id}`,
+      ((roundIndex * 37 + index * 29) % 31) - 15,
+    ]))
+    return { shared, left, right, rotations }
+  })
+}
+
+function DobbleGame({ play, onNext }: { play: (source: string) => void; onNext: () => void }) {
+  const [gameKey, setGameKey] = useState(0)
+  const rounds = useMemo(createDobbleRounds, [gameKey])
+  const [started, setStarted] = useState(false)
+  const [round, setRound] = useState(0)
+  const [scores, setScores] = useState<[number, number]>([0, 0])
+  const [lives, setLives] = useState<[number, number]>([2, 2])
+  const [locked, setLocked] = useState(false)
+  const [feedback, setFeedback] = useState<{ player: 0 | 1; type: 'correct' | 'wrong' } | null>(null)
+  const [finished, setFinished] = useState(false)
+  const current = rounds[round]
+
+  const finishOrAdvance = (nextLives: [number, number]) => {
+    window.setTimeout(() => {
+      if (round === rounds.length - 1 || (nextLives[0] === 0 && nextLives[1] === 0)) {
+        setFinished(true)
+        setFeedback(null)
+        setLocked(false)
+        return
+      }
+      setRound((value) => value + 1)
+      setFeedback(null)
+      setLocked(false)
+    }, 950)
+  }
+
+  const choose = (player: 0 | 1, symbolId: string) => {
+    if (!started || locked || finished || lives[player] === 0) return
+    const isCorrect = symbolId === current.shared.id
+    const opponent = player === 0 ? 1 : 0
+    const nextScores: [number, number] = [...scores]
+    const nextLives: [number, number] = [...lives]
+    setLocked(true)
+    setFeedback({ player, type: isCorrect ? 'correct' : 'wrong' })
+    if (isCorrect) {
+      nextScores[player] += 1
+      play(correctAudio)
+    } else {
+      nextLives[player] = Math.max(0, nextLives[player] - 1)
+      nextScores[opponent] += 1
+      play(wrongAudio)
+    }
+    setScores(nextScores)
+    setLives(nextLives)
+    finishOrAdvance(nextLives)
+  }
+
+  const restart = () => {
+    setGameKey((value) => value + 1)
+    setStarted(false)
+    setRound(0)
+    setScores([0, 0])
+    setLives([2, 2])
+    setLocked(false)
+    setFeedback(null)
+    setFinished(false)
+  }
+
+  const result = scores[0] === scores[1] ? 'DRAW!' : `PLAYER ${scores[0] > scores[1] ? 1 : 2} WINS!`
+
+  return <div className="scene art-scene dobble-scene" style={{ '--scene-art': `url("${originalImages.dobbleBackground}")` } as React.CSSProperties}>
+    <div className="dobble-score dobble-score--one"><span>PLAYER 1</span><strong>{scores[0]}</strong></div>
+    <div className="dobble-round"><span>ROUNDS</span><strong>{finished ? 0 : started ? Math.max(rounds.length - round, 0) : rounds.length}</strong></div>
+    <div className="dobble-score dobble-score--two"><span>PLAYER 2</span><strong>{scores[1]}</strong></div>
+
+    {[0, 1].map((player) => <div className={`dobble-lives dobble-lives--${player === 0 ? 'one' : 'two'}`} key={player} aria-label={`Player ${player + 1}: ${lives[player as 0 | 1]} lives`}>
+      {[0, 1].map((life) => <img key={life} className={life >= lives[player as 0 | 1] ? 'is-lost' : ''} src={originalImages.dobbleLife} alt="" />)}
+    </div>)}
+
+    {([0, 1] as const).map((player) => {
+      const symbols = player === 0 ? current.left : current.right
+      const side = player === 0 ? 'left' : 'right'
+      return <section className={`dobble-card dobble-card--${side} ${started ? 'is-active' : ''} ${lives[player] === 0 ? 'is-out' : ''}`} aria-label={`Player ${player + 1} card`} key={side}>
+        <img className="dobble-card__frame" src={originalImages.dobbleFrame} alt="" />
+        {started && !finished && symbols.map((symbol, index) => {
+          const revealed = Boolean(feedback) && symbol.id === current.shared.id
+          const dimmed = Boolean(feedback) && !revealed
+          return <button
+            className={`dobble-symbol dobble-symbol--${index} ${revealed ? 'is-match' : ''} ${dimmed ? 'is-dimmed' : ''}`}
+            style={{ '--symbol-turn': `${current.rotations[`${side}-${symbol.id}`]}deg` } as React.CSSProperties}
+            key={symbol.id}
+            data-symbol={symbol.id}
+            aria-label={`Player ${player + 1}: ${symbol.label}`}
+            disabled={locked || lives[player] === 0}
+            onClick={() => choose(player, symbol.id)}
+          ><img src={symbol.image} alt={symbol.label} /></button>
+        })}
+        {lives[player] === 0 && !finished && <div className="dobble-player-out">OUT</div>}
+        {feedback?.player === player && <div className={`dobble-feedback dobble-feedback--${feedback.type}`}>{feedback.type === 'correct' ? '✓' : '×'}</div>}
+      </section>
+    })}
+
+    {!started && <button className="dobble-start" onClick={() => setStarted(true)}><span>START</span><b>GAME</b></button>}
+    {finished && <div className="dobble-result" role="status">
+      <small>GAME OVER</small><h2>{result}</h2><p>{scores[0]} — {scores[1]}</p>
+      <button className="dobble-restart" onClick={restart}><RotateCcw /> PLAY AGAIN</button>
+    </div>}
+    {finished && <SourceNextButton onClick={onNext} position="right" />}
   </div>
 }
 
@@ -171,23 +569,37 @@ function FoodMemory({ play, onDone }: { play: (source: string) => void; onDone: 
   const [open, setOpen] = useState<string[]>([])
   const [matched, setMatched] = useState<string[]>([])
   const [locked, setLocked] = useState(false)
+  const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null)
   const flip = (card: MemoryCard) => {
     if (locked || open.includes(card.key) || matched.includes(card.pair)) return
+    if (card.kind === 'word') {
+      const food = originalFoods.find((item) => item.id === card.pair)
+      if (food) play(food.audio)
+    }
     const nextOpen = [...open, card.key]; setOpen(nextOpen)
     if (nextOpen.length < 2) return
     setLocked(true)
     const first = cards.find((item) => item.key === nextOpen[0])!
     if (first.pair === card.pair && first.kind !== card.kind) {
-      play(correctAudio); window.setTimeout(() => { setMatched((values) => [...values, card.pair]); setOpen([]); setLocked(false) }, 450)
-    } else { play(wrongAudio); window.setTimeout(() => { setOpen([]); setLocked(false) }, 750) }
+      setFeedback('correct')
+      window.setTimeout(() => { setMatched((values) => [...values, card.pair]); setOpen([]); setLocked(false); setFeedback(null) }, 650)
+    } else {
+      setFeedback('wrong')
+      window.setTimeout(() => { setOpen([]); setLocked(false); setFeedback(null) }, 850)
+    }
   }
-  return <div className="scene art-scene memory-scene" style={{ '--scene-art': `url("${originalImages.foodRoom}")` } as React.CSSProperties}>
-    <div className="memory-heading"><h2>MEMORY GAME</h2><span>{matched.length} / 6 PAIRS</span></div>
-    <div className="memory-grid">{cards.map((card) => {
+  return <div className="scene art-scene source-memory-scene" style={{ '--scene-art': `url("${originalImages.foodRoom}")` } as React.CSSProperties}>
+    <div className="source-memory-grid">{cards.map((card, index) => {
       const revealed = open.includes(card.key) || matched.includes(card.pair)
-      return <button key={card.key} className={`${revealed ? 'is-open' : ''} ${matched.includes(card.pair) ? 'is-matched' : ''}`} onClick={() => flip(card)}><span className="card-back">?</span><span className="card-front">{card.kind === 'picture' ? <img src={card.image} alt={card.label} /> : <b>{card.label}</b>}</span></button>
+      return <button
+        key={card.key}
+        className={`${revealed ? 'is-open' : ''} ${matched.includes(card.pair) ? 'is-matched' : ''}`}
+        aria-label={revealed ? card.label : `Card ${index + 1}`}
+        onClick={() => flip(card)}
+      ><span className="source-card-back">{index + 1}</span><span className="source-card-front">{card.kind === 'picture' ? <img src={card.image} alt={card.label} /> : <b>{card.label.toLowerCase()}</b>}</span></button>
     })}</div>
-    {matched.length === 6 && <NextButton onClick={onDone}>NEXT</NextButton>}
+    {feedback && <img className={`memory-feedback memory-feedback--${feedback}`} src={assetUrl(`assets/images/memory/${feedback}.png`)} alt="" />}
+    <SourceNextButton onClick={onDone} position="right" />
   </div>
 }
 
@@ -208,40 +620,8 @@ function InvitationJourney({ play, onDone }: { play: (source: string) => void; o
   </div>
 }
 
-function RaceIntro({ onNext }: { onNext: () => void }) {
-  return <div className="scene art-scene race-intro" style={{ '--scene-art': `url("${originalImages.foodRoom}")` } as React.CSSProperties}><div className="race-logo"><small>TWO PLAYERS</small><h2>RACE</h2><p>Find the matching picture first!</p></div><NextButton onClick={onNext}>NEXT</NextButton></div>
-}
-
-const raceSymbols = [...actors.map((actor) => ({ id: actor.id, label: actor.name, image: actor.portrait })), ...originalFoods.map((food) => ({ id: food.id, label: food.label, image: food.image }))]
-const raceRounds = Array.from({ length: 9 }, (_, index) => {
-  const shared = raceSymbols[index % raceSymbols.length]
-  const others = raceSymbols.filter((symbol) => symbol.id !== shared.id)
-  return { shared, left: shuffle([shared, others[(index + 1) % others.length], others[(index + 4) % others.length], others[(index + 7) % others.length]]), right: shuffle([shared, others[(index + 2) % others.length], others[(index + 5) % others.length], others[(index + 8) % others.length]]) }
-})
-
-function MonsterRace({ play, onDone }: { play: (source: string) => void; onDone: () => void }) {
-  const [round, setRound] = useState(0)
-  const [scores, setScores] = useState<[number, number]>([0, 0])
-  const [locked, setLocked] = useState(false)
-  const [finished, setFinished] = useState(false)
-  const current = raceRounds[round]
-  const choose = (player: 0 | 1, id: string) => {
-    if (locked || finished) return
-    if (id !== current.shared.id) { play(wrongAudio); return }
-    setLocked(true); play(correctAudio)
-    const nextScores: [number, number] = player === 0 ? [scores[0] + 1, scores[1]] : [scores[0], scores[1] + 1]
-    setScores(nextScores)
-    window.setTimeout(() => round === raceRounds.length - 1 ? setFinished(true) : (setRound((value) => value + 1), setLocked(false)), 500)
-  }
-  return <div className="scene art-scene race-scene" style={{ '--scene-art': `url("${originalImages.race}")` } as React.CSSProperties}>
-    <header className="race-header"><span>ROUND {round + 1} / 9</span><h2>RACE</h2><strong>{scores[0]} : {scores[1]}</strong></header>
-    {!finished ? <div className="race-table">{[0, 1].map((player) => <section key={player} className={`race-player player-${player + 1}`}><h3>PLAYER {player + 1}</h3><div>{(player === 0 ? current.left : current.right).map((symbol) => <button key={symbol.id} onClick={() => choose(player as 0 | 1, symbol.id)}><img src={symbol.image} alt={symbol.label} /></button>)}</div></section>)}<span className="race-vs">VS</span></div> :
-      <div className="race-result"><small>FINISH!</small><h2>{scores[0] === scores[1] ? 'DRAW' : `PLAYER ${scores[0] > scores[1] ? 1 : 2} WINS`}</h2><p>{scores[0]} — {scores[1]}</p><NextButton onClick={onDone}>NEXT</NextButton></div>}
-  </div>
-}
-
-function PartyScene({ onReplay }: { onReplay: () => void }) {
-  return <div className="scene art-scene party-scene" style={{ '--scene-art': `url("${originalImages.party}")` } as React.CSSProperties}><div className="confetti">{Array.from({ length: 30 }).map((_, index) => <i key={index} style={{ '--i': index } as React.CSSProperties} />)}</div><div className="party-message"><small>YOU DID IT!</small><h2>WELCOME TO THE<br />MONSTERS' PARTY!</h2><button className="gold-button" onClick={onReplay}><RotateCcw /> PLAY AGAIN</button></div></div>
+function FinalScene() {
+  return <div className="scene art-scene final-scene" style={{ '--scene-art': `url("${originalImages.party}")` } as React.CSSProperties} aria-label="Welcome to Monsters' House" />
 }
 
 function SettingsPanel({ soundOn, onSound, onFullscreen, onRestart, onClose }: { soundOn: boolean; onSound: () => void; onFullscreen: () => void; onRestart: () => void; onClose: () => void }) {
