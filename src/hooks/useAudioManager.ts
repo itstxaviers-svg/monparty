@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 
-export function useAudioManager(enabled: boolean, preloadSources: readonly string[] = []) {
+export function useAudioManager(enabled: boolean) {
   const active = useRef<HTMLAudioElement | null>(null)
   const cache = useRef(new Map<string, HTMLAudioElement>())
 
@@ -35,12 +35,8 @@ export function useAudioManager(enabled: boolean, preloadSources: readonly strin
     }, { once: true })
   }, [enabled, getAudio, stop])
 
-  useEffect(() => {
-    preloadSources.forEach(getAudio)
-  }, [getAudio, preloadSources])
-
   useEffect(() => () => stop(), [stop])
   useEffect(() => { if (!enabled) stop() }, [enabled, stop])
 
-  return { play, stop }
+  return { play, stop, preload: getAudio }
 }

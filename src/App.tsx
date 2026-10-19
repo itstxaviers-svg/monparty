@@ -7,13 +7,10 @@ import { useGameSave } from './hooks/useGameSave'
 import type { MonsterId } from './types'
 
 const shuffle = <T,>(items: readonly T[]): T[] => [...items].sort(() => Math.random() - 0.5)
-const preloadedAudioSources = [
-  ...actors.map((actor) => actor.voice),
-  ...Object.values(invitationAudio).flatMap((audio) => Object.values(audio)),
-  correctAudio,
-  wrongAudio,
-]
 const invitationMonsterOrder: MonsterId[] = ['troll', 'skeleton', 'witch', 'vampire', 'ghost', 'raven']
+const cafeOrderMonsterByScene: Partial<Record<number, MonsterId>> = {
+  26: 'witch', 28: 'ghost', 30: 'raven', 32: 'vampire', 34: 'troll', 36: 'skeleton',
+}
 
 interface InvitationRound {
   key: string
@@ -38,11 +35,26 @@ function createInvitationRounds(): InvitationRound[] {
 
 function App() {
   const { state, go, patch, reset } = useGameSave()
-  const audio = useAudioManager(state.soundOn, preloadedAudioSources)
+  const audio = useAudioManager(state.soundOn)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const scene = Math.min(state.scene, sceneNames.length - 1)
   const usesOriginalFrame = scene <= 42
   const next = () => go(Math.min(scene + 1, sceneNames.length - 1))
+
+  useEffect(() => {
+    let sources: string[] = []
+    const cafeMonster = cafeOrderMonsterByScene[scene]
+    if (scene === 2) sources = actors.map((actor) => actor.voice)
+    else if (scene === 19) sources = actors.map((actor) => actor.feelingAudio)
+    else if ([22, 23, 38].includes(scene)) sources = originalFoods.map((food) => food.audio)
+    else if (cafeMonster) {
+      sources = [
+        ...Object.values(invitationAudio).map((sounds) => sounds.wrong),
+        invitationAudio[cafeMonster].correct,
+      ]
+    } else if (scene === 39) sources = [correctAudio, wrongAudio]
+    sources.forEach(audio.preload)
+  }, [scene, audio.preload])
 
   const toggleFullscreen = () => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined)
@@ -78,7 +90,7 @@ function App() {
         {scene === 1 && <HouseScene onNext={next} />}
         {scene === 2 && <MeetScene play={audio.play} onNext={() => go(3)} />}
         {scene === 3 && <SourceVideoScene source={assetUrl('assets/video/slide-05.mp4')} onNext={() => go(4)} />}
-        {scene >= 4 && scene <= 17 && <InvitationGame scene={scene} play={audio.play} go={go} />}
+        {scene >= 4 && scene <= 17 && <InvitationGame scene={scene} play={audio.play} preload={audio.preload} go={go} />}
         {scene === 18 && <SourceVideoScene source={assetUrl('assets/video/slide-19-witch.mp4')} onNext={() => go(19)} layout="transition" />}
         {scene === 19 && <FeelingsChallenge play={audio.play} onDone={() => go(20)} />}
         {scene === 20 && <SourceVideoScene source={assetUrl('assets/video/slide-21-skeleton.mp4')} onNext={() => go(21)} layout="transition" />}
@@ -188,7 +200,7 @@ function AutoAdvanceVideoScene({ source, onDone, delayMs = 60_000, variant = 'de
   </div>
 }
 
-function InvitationGame({ scene, play, go }: { scene: number; play: (source: string) => void; go: (scene: number) => void }) {
+function InvitationGame({ scene, play, preload, go }: { scene: number; play: (source: string) => void; preload: (source: string) => HTMLAudioElement; go: (scene: number) => void }) {
   const [rounds, setRounds] = useState<InvitationRound[]>(createInvitationRounds)
   const [heard, setHeard] = useState(false)
   const [wrong, setWrong] = useState<MonsterId | null>(null)
@@ -199,6 +211,13 @@ function InvitationGame({ scene, play, go }: { scene: number; play: (source: str
     setWrong(null)
     setCorrect(null)
   }, [scene])
+
+  const current = rounds[scene - 6]
+  useEffect(() => {
+    if (!current) return
+    const sounds = invitationAudio[current.monsterId]
+    ;[current.audio, sounds.wrong, sounds.correct].forEach(preload)
+  }, [current, preload])
 
   if (scene === 4) {
     return <div className="scene invitation-mailbox-scene" style={{ '--scene-art': `url("${invitationImages.mailbox}")` } as React.CSSProperties}>
@@ -225,8 +244,6 @@ function InvitationGame({ scene, play, go }: { scene: number; play: (source: str
     </div>
   }
 
-  const roundIndex = scene - 6
-  const current = rounds[roundIndex]
   const listen = () => {
     play(current.audio)
     setHeard(true)
