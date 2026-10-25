@@ -1,7 +1,7 @@
 import { chromium } from 'playwright-core'
 import { mkdir } from 'node:fs/promises'
 
-const baseURL = process.env.BASE_URL || 'http://127.0.0.1:4174/mosters-party/'
+const baseURL = process.env.BASE_URL || 'http://127.0.0.1:4173/monparty/'
 const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const shots = 'test-results/slide-menu'
 await mkdir(shots, { recursive: true })
@@ -20,7 +20,8 @@ page.on('response', (response) => { if (response.status() >= 400) errors.push(`$
 await page.goto(baseURL)
 await page.locator('.project-slide-menu').waitFor({ state: 'visible' })
 if (await page.locator('.project-nav').count() !== 0) throw new Error('Old arrow navigation is still present')
-if (await page.locator('.project-slide-menu__grid button').count() !== 43) throw new Error('Slide menu does not contain all 43 slides')
+if (await page.locator('.project-slide-menu__grid button').count() !== 30) throw new Error('Slide menu does not group slides 5–18 into one game')
+if (await page.getByRole('button', { name: 'Slides 5–18: Invitation game' }).count() !== 1) throw new Error('Invitation game entry is missing')
 const panel = page.locator('.project-slide-menu__panel')
 const panelOpacity = () => panel.evaluate((node) => Number(getComputedStyle(node).opacity))
 if (await panelOpacity() > 0.05) throw new Error('Slide menu is visible without hovering over the left side')
@@ -39,6 +40,6 @@ await page.waitForFunction(() => Number(getComputedStyle(document.querySelector(
 if (await panel.evaluate((node) => getComputedStyle(node).pointerEvents) !== 'none') throw new Error('Slide menu still captures clicks after the cursor leaves the left side')
 await page.screenshot({ path: `${shots}/03-slide-24-selected.png` })
 
-console.log(JSON.stringify({ errors, buttons: 43, selectedSlide: 24, screenshots: 3 }, null, 2))
+console.log(JSON.stringify({ errors, buttons: 30, selectedSlide: 24, screenshots: 3 }, null, 2))
 await browser.close()
 if (errors.length) process.exitCode = 1

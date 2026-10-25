@@ -31,7 +31,7 @@ export const originalImages = {
   dobbleFrame: assetUrl('assets/images/race/dobble-frame.png'),
   dobbleLife: assetUrl('assets/images/race/dobble-life.png'),
   race: assetUrl('assets/images/original/race.jpg'),
-  party: assetUrl('assets/images/original/party.jpg'),
+  party: assetUrl('assets/images/original/party-no-right-raven.jpg'),
 }
 
 export const actors: Actor[] = [
@@ -138,32 +138,32 @@ export const invitationAudio: Record<MonsterId, InvitationAudioSet> = {
 export const cafeScenes = {
   witch: {
     background: assetUrl('assets/images/cafe/witch.jpg'),
-    reaction: assetUrl('assets/video/cafe/reaction-wi.mp4'),
+    reaction: assetUrl('assets/video/cafe/food-reaction-wi.mp4'),
     correctFood: 'peach',
   },
   ghost: {
     background: assetUrl('assets/images/cafe/ghost.jpg'),
-    reaction: assetUrl('assets/video/cafe/reaction-gh.mp4'),
+    reaction: assetUrl('assets/video/cafe/food-reaction-gh.mp4'),
     correctFood: 'toast',
   },
   raven: {
     background: assetUrl('assets/images/cafe/raven.jpg'),
-    reaction: assetUrl('assets/video/cafe/reaction-r.mp4'),
+    reaction: assetUrl('assets/video/cafe/food-reaction-r.mp4'),
     correctFood: 'bacon',
   },
   vampire: {
     background: assetUrl('assets/images/cafe/vampire.jpg'),
-    reaction: assetUrl('assets/video/cafe/reaction-v.mp4'),
+    reaction: assetUrl('assets/video/cafe/food-reaction-v.mp4'),
     correctFood: 'juice',
   },
   troll: {
     background: assetUrl('assets/images/cafe/troll.jpg'),
-    reaction: assetUrl('assets/video/cafe/reaction-tr.mp4'),
+    reaction: assetUrl('assets/video/cafe/food-reaction-tr.mp4'),
     correctFood: 'roll',
   },
   skeleton: {
     background: assetUrl('assets/images/cafe/skeleton.jpg'),
-    reaction: assetUrl('assets/video/cafe/reaction-sk.mp4'),
+    reaction: assetUrl('assets/video/cafe/food-reaction-sk.mp4'),
     correctFood: 'melon',
   },
 } as const satisfies Record<MonsterId, { background: string; reaction: string; correctFood: (typeof originalFoods)[number]['id'] }>

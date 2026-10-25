@@ -31,10 +31,13 @@ if (audioRequests.length) throw new Error(`Initial slide requested ${audioReques
 await page.screenshot({ path: `${screenshots}/01-cover.png` })
 
 await page.mouse.move(18, 450)
-await page.getByRole('button', { name: 'Slide 7: Invitation 1' }).click()
+await page.getByRole('button', { name: 'Slides 5–18: Invitation game' }).click()
+await page.getByRole('button', { name: 'Open the mailbox' }).click()
+await page.getByRole('button', { name: 'Open the invitation' }).click()
 await page.locator('.invitation-card img').waitFor({ state: 'visible' })
 console.log('Invitation loaded')
-const target = (await page.locator('.invitation-card img').getAttribute('src')).split('/').at(-1).split('.')[0]
+const targetImage = await page.locator('.invitation-card img').getAttribute('src')
+const target = targetImage.split('/').at(-1).split('.')[0]
 await page.waitForTimeout(500)
 if (audioRequests.length !== 3) throw new Error(`Invitation preloaded ${audioRequests.length} audio files instead of 3`)
 await page.getByRole('button', { name: 'Listen to the invitation' }).click()
@@ -50,7 +53,10 @@ if (!wrongVoice.endsWith(`${target}-boo.wav`)) throw new Error(`Unexpected wrong
 await page.getByRole('button', { name: target[0].toUpperCase() + target.slice(1), exact: true }).click()
 const correctVoice = await page.evaluate(() => window.__playedMedia.at(-1))
 if (!correctVoice.endsWith(`${target}-br.wav`)) throw new Error(`Unexpected right-answer sound: ${correctVoice}`)
-await page.locator('.game-stage[data-scene="7"]').waitFor({ state: 'visible' })
+await page.waitForFunction((previous) => {
+  const image = document.querySelector('.invitation-card img')
+  return image && image.getAttribute('src') !== previous && document.querySelector('.game-stage')?.getAttribute('data-scene') === '4'
+}, targetImage)
 
 await page.mouse.move(18, 450)
 await page.getByRole('button', { name: 'Slide 36: Skeleton order' }).click()

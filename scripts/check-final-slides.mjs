@@ -1,7 +1,7 @@
 import { chromium } from 'playwright-core'
 import { mkdir } from 'node:fs/promises'
 
-const baseURL = process.env.BASE_URL || 'http://127.0.0.1:4174/mosters-party/'
+const baseURL = process.env.BASE_URL || 'http://127.0.0.1:4173/monparty/'
 const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const shots = 'test-results/final-slides'
 await mkdir(shots, { recursive: true })
@@ -39,7 +39,7 @@ const seekTo = (seconds) => page.locator('.source-video-scene video').evaluate((
 await page.goto(baseURL)
 await page.locator('.source-video-scene video').waitFor({ state: 'visible' })
 await waitForMetadata()
-if (await page.locator('.project-slide-menu__grid button').count() !== 43) throw new Error('Slide menu does not contain 43 slides')
+if (await page.locator('.project-slide-menu__grid button').count() !== 30) throw new Error('Slide menu does not group slides 5–18 into one game')
 const troll = await videoInfo()
 if (!troll.source.endsWith('/assets/video/slide-41-troll.mp4') || troll.width !== 1280 || troll.height !== 704) throw new Error(`Wrong slide 41 video: ${JSON.stringify(troll)}`)
 await seekTo(4)
@@ -58,6 +58,6 @@ await page.getByRole('button', { name: 'NEXT', exact: true }).click()
 await page.locator('.final-scene').waitFor({ state: 'visible' })
 if (await scene() !== '42') throw new Error('Slide 42 did not advance to slide 43')
 await page.screenshot({ path: `${shots}/03-slide-43-final.png` })
-console.log(JSON.stringify({ errors, menuSlides: 43, troll, song, finalScene: await scene(), screenshots: 3 }, null, 2))
+console.log(JSON.stringify({ errors, menuEntries: 30, troll, song, finalScene: await scene(), screenshots: 3 }, null, 2))
 await browser.close()
 if (errors.length) process.exitCode = 1

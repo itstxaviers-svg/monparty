@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Expand, RotateCcw, Settings, Volume2, VolumeX, X } from 'lucide-react'
 import { actorById, actors, cafeScenes, correctAudio, invitationAudio, invitationImages, meetLayout, originalFoods, originalImages, sceneNames, wrongAudio } from './data/originalGame'
 import { assetUrl } from './data/gameData'
@@ -8,6 +8,8 @@ import type { MonsterId } from './types'
 
 const shuffle = <T,>(items: readonly T[]): T[] => [...items].sort(() => Math.random() - 0.5)
 const invitationMonsterOrder: MonsterId[] = ['troll', 'skeleton', 'witch', 'vampire', 'ghost', 'raven']
+const invitationStartScene = 4
+const invitationEndScene = 17
 const cafeOrderMonsterByScene: Partial<Record<number, MonsterId>> = {
   26: 'witch', 28: 'ghost', 30: 'raven', 32: 'vampire', 34: 'troll', 36: 'skeleton',
 }
@@ -37,9 +39,23 @@ function App() {
   const { state, go, patch, reset } = useGameSave()
   const audio = useAudioManager(state.soundOn)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const scene = Math.min(state.scene, sceneNames.length - 1)
+  const [invitationSession, setInvitationSession] = useState(0)
+  const scene = state.scene >= invitationStartScene && state.scene <= invitationEndScene
+    ? invitationStartScene
+    : Math.min(state.scene, sceneNames.length - 1)
   const usesOriginalFrame = scene <= 42
   const next = () => go(Math.min(scene + 1, sceneNames.length - 1))
+
+  useEffect(() => {
+    if (state.scene > invitationStartScene && state.scene <= invitationEndScene) go(invitationStartScene)
+  }, [state.scene, go])
+
+  const chooseSlide = (index: number) => {
+    if (index >= invitationStartScene && index <= invitationEndScene) {
+      setInvitationSession((current) => current + 1)
+      go(invitationStartScene)
+    } else go(index)
+  }
 
   useEffect(() => {
     let sources: string[] = []
@@ -67,14 +83,15 @@ function App() {
         <div className="project-slide-menu__panel">
           <span>SLIDES</span>
           <div className="project-slide-menu__grid">
-            {sceneNames.map((name, index) => <button
+            {sceneNames.map((name, index) => index > invitationStartScene && index <= invitationEndScene ? null : <button
               key={`${index}-${name}`}
               type="button"
-              aria-label={`Slide ${index + 1}: ${name}`}
+              className={index === invitationStartScene ? 'project-slide-menu__game' : undefined}
+              aria-label={index === invitationStartScene ? 'Slides 5–18: Invitation game' : `Slide ${index + 1}: ${name}`}
               aria-current={scene === index ? 'page' : undefined}
-              title={name}
-              onClick={() => go(index)}
-            >{index + 1}</button>)}
+              title={index === invitationStartScene ? 'Invitation game (slides 5–18)' : name}
+              onClick={() => chooseSlide(index)}
+            >{index === invitationStartScene ? '5–18' : index + 1}</button>)}
           </div>
         </div>
       </nav>
@@ -90,7 +107,7 @@ function App() {
         {scene === 1 && <HouseScene onNext={next} />}
         {scene === 2 && <MeetScene play={audio.play} onNext={() => go(3)} />}
         {scene === 3 && <SourceVideoScene source={assetUrl('assets/video/slide-05.mp4')} onNext={() => go(4)} />}
-        {scene >= 4 && scene <= 17 && <InvitationGame scene={scene} play={audio.play} preload={audio.preload} go={go} />}
+        {scene === invitationStartScene && <InvitationGame key={invitationSession} play={audio.play} preload={audio.preload} onDone={() => go(18)} />}
         {scene === 18 && <SourceVideoScene source={assetUrl('assets/video/slide-19-witch.mp4')} onNext={() => go(19)} layout="transition" />}
         {scene === 19 && <FeelingsChallenge play={audio.play} onDone={() => go(20)} />}
         {scene === 20 && <SourceVideoScene source={assetUrl('assets/video/slide-21-skeleton.mp4')} onNext={() => go(21)} layout="transition" />}
@@ -169,7 +186,7 @@ function MeetScene({ play, onNext }: { play: (source: string) => void; onNext: (
           '--image-left': `${layout.imageLeft}%`, '--image-top': `${layout.imageTop}%`,
           '--image-width': `${layout.imageWidth}%`, '--image-height': `${layout.imageHeight}%`,
         } as React.CSSProperties}
-      ><video src={actor.animation} aria-label={actor.name} autoPlay loop muted playsInline preload="auto" /></button>
+      ><img src={actor.character} alt="" decoding="async" /></button>
     })}
     <SourceNextButton onClick={onNext} position="right" />
   </div>
@@ -200,47 +217,56 @@ function AutoAdvanceVideoScene({ source, onDone, delayMs = 60_000, variant = 'de
   </div>
 }
 
-function InvitationGame({ scene, play, preload, go }: { scene: number; play: (source: string) => void; preload: (source: string) => HTMLAudioElement; go: (scene: number) => void }) {
+function InvitationGame({ play, preload, onDone }: { play: (source: string) => void; preload: (source: string) => HTMLAudioElement; onDone: () => void }) {
   const [rounds, setRounds] = useState<InvitationRound[]>(createInvitationRounds)
+  const [phase, setPhase] = useState<'mailbox' | 'letter' | 'round' | 'complete'>('mailbox')
+  const [roundIndex, setRoundIndex] = useState(0)
   const [heard, setHeard] = useState(false)
   const [wrong, setWrong] = useState<MonsterId | null>(null)
   const [correct, setCorrect] = useState<MonsterId | null>(null)
+  const feedbackTimer = useRef<number | null>(null)
+  const advanceTimer = useRef<number | null>(null)
 
   useEffect(() => {
-    setHeard(false)
-    setWrong(null)
-    setCorrect(null)
-  }, [scene])
+    return () => {
+      if (feedbackTimer.current !== null) window.clearTimeout(feedbackTimer.current)
+      if (advanceTimer.current !== null) window.clearTimeout(advanceTimer.current)
+    }
+  }, [])
 
-  const current = rounds[scene - 6]
+  const current = rounds[roundIndex]
   useEffect(() => {
-    if (!current) return
+    if (phase !== 'round') return
     const sounds = invitationAudio[current.monsterId]
     ;[current.audio, sounds.wrong, sounds.correct].forEach(preload)
-  }, [current, preload])
+  }, [current, phase, preload])
 
-  if (scene === 4) {
+  if (phase === 'mailbox') {
     return <div className="scene invitation-mailbox-scene" style={{ '--scene-art': `url("${invitationImages.mailbox}")` } as React.CSSProperties}>
-      <button className="mailbox-hotspot" aria-label="Open the mailbox" onClick={() => go(5)} />
+      <button className="mailbox-hotspot" aria-label="Open the mailbox" onClick={() => setPhase('letter')} />
     </div>
   }
 
-  if (scene === 5) {
+  if (phase === 'letter') {
     return <div className="scene invitation-letter-scene" style={{ '--scene-art': `url("${invitationImages.mailboxDim}")` } as React.CSSProperties}>
-      <button className="flying-letter" aria-label="Open the invitation" onClick={() => go(6)}>
+      <button className="flying-letter" aria-label="Open the invitation" onClick={() => setPhase('round')}>
         <img src={invitationImages.envelope} alt="Invitation envelope" />
       </button>
     </div>
   }
 
-  if (scene === 17) {
+  if (phase === 'complete') {
     const restart = () => {
       setRounds(createInvitationRounds())
-      go(4)
+      setRoundIndex(0)
+      setHeard(false)
+      setWrong(null)
+      setCorrect(null)
+      setPhase('mailbox')
     }
     return <div className="scene invitation-game-over" style={{ '--scene-art': `url("${invitationImages.gameOver}")` } as React.CSSProperties}>
       <button className="game-over-hotspot game-over-hotspot--again" aria-label="Start again" onClick={restart} />
-      <button className="game-over-hotspot game-over-hotspot--continue" aria-label="Continue" onClick={() => go(18)} />
+      <button className="game-over-hotspot game-over-hotspot--continue" aria-label="Continue" onClick={onDone} />
     </div>
   }
 
@@ -253,12 +279,19 @@ function InvitationGame({ scene, play, preload, go }: { scene: number; play: (so
     if (id !== current.monsterId) {
       setWrong(id)
       play(invitationAudio[current.monsterId].wrong)
-      window.setTimeout(() => setWrong(null), 500)
+      if (feedbackTimer.current !== null) window.clearTimeout(feedbackTimer.current)
+      feedbackTimer.current = window.setTimeout(() => setWrong(null), 500)
       return
     }
     setCorrect(id)
     play(invitationAudio[current.monsterId].correct)
-    window.setTimeout(() => go(scene + 1), 650)
+    advanceTimer.current = window.setTimeout(() => {
+      setHeard(false)
+      setWrong(null)
+      setCorrect(null)
+      if (roundIndex + 1 === rounds.length) setPhase('complete')
+      else setRoundIndex(roundIndex + 1)
+    }, 650)
   }
 
   return <div className="scene invitation-round-scene" style={{ '--scene-art': `url("${invitationImages.mailboxDim}")` } as React.CSSProperties}>
@@ -330,7 +363,7 @@ function FeelingsChallenge({ play, onDone }: { play: (source: string) => void; o
           '--image-left': `${layout.imageLeft}%`, '--image-top': `${layout.imageTop}%`,
           '--image-width': `${layout.imageWidth}%`, '--image-height': `${layout.imageHeight}%`,
         } as React.CSSProperties}
-      ><video src={actor.animation} poster={actor.character} autoPlay loop muted playsInline preload="auto" /></button>
+      ><img src={actor.character} alt="" decoding="async" /></button>
     })}
     <SourceNextButton onClick={onDone} position="right" />
   </div>
@@ -613,7 +646,7 @@ function FoodMemory({ play, onDone }: { play: (source: string) => void; onDone: 
         className={`${revealed ? 'is-open' : ''} ${matched.includes(card.pair) ? 'is-matched' : ''}`}
         aria-label={revealed ? card.label : `Card ${index + 1}`}
         onClick={() => flip(card)}
-      ><span className="source-card-back">{index + 1}</span><span className="source-card-front">{card.kind === 'picture' ? <img src={card.image} alt={card.label} /> : <b>{card.label.toLowerCase()}</b>}</span></button>
+      ><span className="source-card-back">{index + 1}</span><span className="source-card-front">{card.kind === 'picture' ? <img src={card.image} alt={card.label} /> : <b>{card.label}</b>}</span></button>
     })}</div>
     {feedback && <img className={`memory-feedback memory-feedback--${feedback}`} src={assetUrl(`assets/images/memory/${feedback}.png`)} alt="" />}
     <SourceNextButton onClick={onDone} position="right" />
