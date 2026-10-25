@@ -41,7 +41,7 @@ await page.locator('.source-video-scene video').waitFor({ state: 'visible' })
 await waitForMetadata()
 if (await page.locator('.project-slide-menu__grid button').count() !== 30) throw new Error('Slide menu does not group slides 5–18 into one game')
 const troll = await videoInfo()
-if (!troll.source.endsWith('/assets/video/slide-41-troll.mp4') || troll.width !== 1280 || troll.height !== 704) throw new Error(`Wrong slide 41 video: ${JSON.stringify(troll)}`)
+if (!troll.source.endsWith('/assets/video/slide-41-project.mp4') || troll.width !== 1080 || troll.height !== 720) throw new Error(`Wrong slide 41 video: ${JSON.stringify(troll)}`)
 await seekTo(4)
 await page.screenshot({ path: `${shots}/01-slide-41-troll-video.png` })
 

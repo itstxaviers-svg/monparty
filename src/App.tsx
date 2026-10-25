@@ -130,7 +130,7 @@ function App() {
         {scene === 37 && <AutoAdvanceVideoScene source={assetUrl('assets/video/cafe/slide-38-full.mp4')} onDone={() => go(38)} delayMs={60_000} variant="closing" />}
         {scene === 38 && <FoodWordSwitcher play={audio.play} onNext={() => go(39)} />}
         {scene === 39 && <DobbleGame play={audio.play} onNext={() => go(40)} />}
-        {scene === 40 && <SourceVideoScene source={assetUrl('assets/video/slide-41-troll.mp4')} onNext={() => go(41)} layout="transition" />}
+        {scene === 40 && <SourceVideoScene source={assetUrl('assets/video/slide-41-project.mp4')} onNext={() => go(41)} layout="transition" />}
         {scene === 41 && <SourceVideoScene source={assetUrl('assets/video/slide-42-song.mp4')} onNext={() => go(42)} layout="song" autoPlay />}
         {scene === 42 && <FinalScene />}
 
