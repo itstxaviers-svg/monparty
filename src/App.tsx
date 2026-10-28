@@ -13,6 +13,45 @@ const invitationEndScene = 17
 const cafeOrderMonsterByScene: Partial<Record<number, MonsterId>> = {
   26: 'witch', 28: 'ghost', 30: 'raven', 32: 'vampire', 34: 'troll', 36: 'skeleton',
 }
+const preloadedImages = new Map<string, HTMLImageElement>()
+
+function preloadImage(source: string) {
+  if (preloadedImages.has(source)) return
+  const image = new Image()
+  preloadedImages.set(source, image)
+  image.src = source
+  void image.decode().catch(() => undefined)
+}
+
+function visualAssetsForScene(scene: number): string[] {
+  const cafeMonster = cafeOrderMonsterByScene[scene]
+  if (cafeMonster) return [cafeScenes[cafeMonster].background, ...originalFoods.map((food) => food.image)]
+  switch (scene) {
+    case 0: return [originalImages.title, originalImages.nextFrame]
+    case 1: return [originalImages.house, originalImages.nextFrame]
+    case 2: return [originalImages.house, originalImages.nextFrame, ...actors.map((actor) => actor.character)]
+    case 4: return [
+      invitationImages.mailbox, invitationImages.mailboxDim, invitationImages.envelope,
+      invitationImages.gameOver, ...Object.values(invitationImages.cards),
+      ...actors.map((actor) => actor.portrait),
+    ]
+    case 19: return [originalImages.feelings, originalImages.nextFrame, ...actors.map((actor) => actor.character)]
+    case 22: return [originalImages.foodIntro, originalImages.nextFrame, ...originalFoods.map((food) => food.image)]
+    case 23: return [originalImages.foodRoom, originalImages.nextFrame, ...originalFoods.map((food) => food.image)]
+    case 38: return [originalImages.raceWordBackground, originalImages.raceWordFrame, originalImages.nextFrame]
+    case 39: return [
+      originalImages.dobbleBackground, originalImages.dobbleFrame, originalImages.dobbleLife,
+      originalImages.nextFrame, ...actors.map((actor) => actor.portrait),
+      ...originalFoods.map((food) => food.image),
+    ]
+    case 42: return [originalImages.party]
+    default: return []
+  }
+}
+
+function preloadSceneImages(scene: number) {
+  visualAssetsForScene(scene).forEach(preloadImage)
+}
 
 interface InvitationRound {
   key: string
@@ -49,6 +88,11 @@ function App() {
   useEffect(() => {
     if (state.scene > invitationStartScene && state.scene <= invitationEndScene) go(invitationStartScene)
   }, [state.scene, go])
+
+  useEffect(() => {
+    preloadSceneImages(scene)
+    preloadSceneImages(scene + 1)
+  }, [scene])
 
   const chooseSlide = (index: number) => {
     if (index >= invitationStartScene && index <= invitationEndScene) {
@@ -90,6 +134,8 @@ function App() {
               aria-label={index === invitationStartScene ? 'Slides 5–18: Invitation game' : `Slide ${index + 1}: ${name}`}
               aria-current={scene === index ? 'page' : undefined}
               title={index === invitationStartScene ? 'Invitation game (slides 5–18)' : name}
+              onPointerEnter={() => preloadSceneImages(index)}
+              onFocus={() => preloadSceneImages(index)}
               onClick={() => chooseSlide(index)}
             >{index === invitationStartScene ? '5–18' : index + 1}</button>)}
           </div>
@@ -186,7 +232,7 @@ function MeetScene({ play, onNext }: { play: (source: string) => void; onNext: (
           '--image-left': `${layout.imageLeft}%`, '--image-top': `${layout.imageTop}%`,
           '--image-width': `${layout.imageWidth}%`, '--image-height': `${layout.imageHeight}%`,
         } as React.CSSProperties}
-      ><img src={actor.character} alt="" decoding="async" /></button>
+      ><img src={actor.character} alt="" decoding="sync" /></button>
     })}
     <SourceNextButton onClick={onNext} position="right" />
   </div>
@@ -363,7 +409,7 @@ function FeelingsChallenge({ play, onDone }: { play: (source: string) => void; o
           '--image-left': `${layout.imageLeft}%`, '--image-top': `${layout.imageTop}%`,
           '--image-width': `${layout.imageWidth}%`, '--image-height': `${layout.imageHeight}%`,
         } as React.CSSProperties}
-      ><img src={actor.character} alt="" decoding="async" /></button>
+      ><img src={actor.character} alt="" decoding="sync" /></button>
     })}
     <SourceNextButton onClick={onDone} position="right" />
   </div>
